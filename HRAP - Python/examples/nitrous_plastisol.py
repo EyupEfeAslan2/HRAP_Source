@@ -1,5 +1,5 @@
 # Purpose: Demonstrate API usage and validate for a typical hybrid, case is similar to GUI defaults
-# Authors: Thomas A. Scott
+# HRAP_Source/HRAP - Python/examples/nitrous_plastisol.py
 
 import scipy
 import numpy as np
@@ -50,38 +50,79 @@ get_sat_nos_props = fluid.bake_sat_coolprop('NitrousOxide', np.linspace(183.0, 3
 
 
 print('Initializing engine...')
+
+# === sizing.py'den alınan değerler ===
+target_thrust = 500  # N
+burn_time = 8.0  # s
+OF_ratio = 3.5
+
+# Sizing.py'den gelen hesaplanmış değerler:
+throat_diameter_mm = 9.21
+grain_length_mm = 120.64  # 30.16 inch
+inner_diameter_mm = 40.00  # 1.575 inch (2.5/1000.0 * _in gibi görünüyor ama sizing 40mm veriyor)
+outer_diameter_mm = 48.69  # 1.917 inch
+oxidizer_mass_flow = 0.04  # kg/s
+
+# Oksitleyici kütle hesabı
+m_ox_required = oxidizer_mass_flow * burn_time  # kg
+
+# Tank hacmi hesabı (sıvı N2O yoğunluğu ~745 kg/m³, %50 boşluk payı)
+rho_n2o_liquid = 745.0  # kg/m³
+tank_volume = (m_ox_required / rho_n2o_liquid) * 1.5  # 50% ullage
+
+# ENJEKTÖRün HESAPLANMASI
+# Enjektör CdA hesabı: mdot = Cd * A * sqrt(2 * rho * dP)
+# Basınç düşüşü genelde tank basıncının %20-30'u kadar alınır
+# Tank basıncı ~50 bar, chamber basıncı ~20-30 bar olacağından
+# dP ~20 bar = 2e6 Pa varsayalım
+Cd_injector = 0.7  # Tipik değer
+dP_injector = 2.0e6  # Pa (20 bar)
+rho_injector = rho_n2o_liquid  # kg/m³
+
+# mdot = Cd * A * sqrt(2 * rho * dP)
+# A = mdot / (Cd * sqrt(2 * rho * dP))
+injector_area = oxidizer_mass_flow / (Cd_injector * np.sqrt(2 * rho_injector * dP_injector))
+inj_CdA = Cd_injector * injector_area
+
+print(f"Calculated inj_CdA: {inj_CdA:.6e} m²")
+print(f"Oxidizer mass: {m_ox_required:.3f} kg")
+print(f"Tank volume: {tank_volume*1e6:.1f} cm³")
+
+# TANK
 tnk = make_sat_tank(
     get_sat_nos_props,
-    V = (np.pi/4 * 4.75**2 * _in**2) * (7.0 * _ft),
-    inj_CdA = 0.22 * (np.pi/4 * 0.5**2 * _in**2),
-    m_ox = 12.6, # TODO: init limit
+    V = tank_volume,
+    inj_CdA = inj_CdA,
+    m_ox = m_ox_required,
     T = 294,
 )
 
+# GRAIN - Sizing.py'den gelen değerlerle
 shape = make_circle_shape(
-    ID = 2.5 * _in,
+    ID = inner_diameter_mm / 1000.0,  # mm'den m'ye
 )
 grn = make_constOF_grain(
     shape,
-    OF = 3.5,
-    OD = 4.5 * _in,
-    L = 30.0 * _in,
+    OF = OF_ratio,
+    OD = outer_diameter_mm / 1000.0,  # mm'den m'ye
+    L = grain_length_mm / 1000.0,  # mm'den m'ye
     rho = 1117.0,
 )
 
-prepost_ID = 4.25*_in                               # Inner diameter of pre and post combustion chambers (m)
+# CHAMBER
+prepost_ID = 4.25*_in  # Inner diameter of pre and post combustion chambers (m)
 prepost_V  = (3.5+1.7)*_in * np.pi/4*prepost_ID**2  # Empty volume of pre and post combustion chambers (m^3)
-rings_V    = 3 * (1/8*_in) * np.pi*(2.5/2 * _in)**2 # Empty volume of phenolic rings (m^3)
-fuel_V     = (30.0 * _in) * np.pi*(4.5/2 * _in)**2  # Empty volume of grain footprint (m^3)
+rings_V    = 3 * (1/8*_in) * np.pi*(2.5/2 * _in)**2  # Empty volume of phenolic rings (m^3)
+fuel_V     = (grain_length_mm/1000.0) * np.pi*((outer_diameter_mm/1000.0)/2)**2  # Empty volume of grain footprint (m^3)
 cmbr = make_chamber(
     V0 = prepost_V + rings_V + fuel_V, # Volume of chamber w/o grain (m^3)
-    # V0 = 0.0, # Note: sim can be a bit unstable with this and incompressible injetor
-    cstar_eff = 1.0,#0.95
+    cstar_eff = 1.0,  # 0.95
 )
 
+# NOZZLE - Sizing.py'den gelen throat diameter
 noz = make_cd_nozzle(
-    thrt = 1.75 * _in, # Throat diameter
-    ER = 4.99,         # Exit/throat area ratio
+    thrt = throat_diameter_mm / 1000.0,  # mm'den m'ye
+    ER = 4.99,  # Exit/throat area ratio
     eff = 0.97,
     C_d = 0.995,
 )
@@ -123,12 +164,6 @@ print('done, first run was {a:.2f}s, second run was {b:.2f}s'.format(a=t2-t1, b=
 # Unpack the dynamic engine state
 N_t = xstack.shape[0]
 tnk, grn, cmbr, noz = core.unpack_engine(s, xstack, method)
-# print('Post-run arrays:')
-# for name, obj in (('tnk', tnk), ('grn', grn), ('cmbr', cmbr), ('noz', noz)):
-#     print(name+':')
-#     for key, val in obj.items():
-#         print(key+':', val)
-#     print()
 
 # Ensure results folder exists
 results_path = Path('./results')
@@ -156,7 +191,9 @@ axs = np.array(axs).ravel()
 
 # Plot thrust
 axs[0].plot(np.linspace(0.0, T, N_t), noz['thrust'], label='sim')
+axs[0].axhline(y=target_thrust, color='r', linestyle='--', label=f'target={target_thrust}N')
 axs[0].set_title('Thrust')
+axs[0].legend()
 
 # Plot oxidizer flow rate
 axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_ox'], label='mdot_ox')
@@ -165,6 +202,7 @@ axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_vnt'], label='mdot_vnt')
 axs[1].plot(np.linspace(0.0, T, N_t), grn['mdot'], label='mdot_grn')
 axs[1].plot(np.linspace(0.0, T, N_t), noz['mdot'], label='mdot_noz')
 axs[1].plot(np.linspace(0.0, T, N_t), cmbr['mdot_g'], label='mdot_cmbr')
+axs[1].axhline(y=oxidizer_mass_flow, color='r', linestyle='--', label=f'target ox={oxidizer_mass_flow}')
 axs[1].legend(loc='upper right')
 axs[1].set_title('mdot')
 
@@ -184,38 +222,20 @@ axs[4].plot(np.linspace(0.0, T, N_t), grn['V']*grn['rho'], label='grain')
 axs[4].legend()
 axs[4].set_title('m')
 
-D = (4.5 - 2.5)*_in # TODO: get
+D = (outer_diameter_mm - inner_diameter_mm) / 1000.0  # grain thickness in m
 axs[5].plot([0.0, T], [D]*2, label='grain thickness')
 axs[5].plot(np.linspace(0.0, T, N_t), grn['d'], label='net regression')
-# axs[5].plot(np.linspace(0.0, T, N_t), grn['V'], label='grain volume')
 axs[5].legend()
 
 axs[6].plot(np.linspace(0.0, T, N_t), noz['Me'], label='Mach exit')
 axs[6].legend()
 
-# axs[7].plot(np.linspace(0.0, T, N_t), cmbr['V0'] - 0*grn['V'], label='cmbr V0')
-# axs[7].plot(np.linspace(0.0, T, N_t), grn['V'], label='grain V')
 axs[7].plot(np.linspace(0.0, T, N_t), cmbr['cstar'], label='cstar')
 axs[7].plot(np.linspace(0.0, T, N_t), cmbr['T'], label='cmbr T')
-# axs[7].plot(np.linspace(0.0, T, N_t), cmbr['V0'] - grn['V'], label='Empty cmbr V')
-# axs[5].plot(np.linspace(0.0, T, N_t), grn['V'], label='grain volume')
 axs[7].legend()
 
-# axs[8].plot(np.linspace(0.0, T, N_t), cmbr['k'], label='cmbr k')
 axs[8].plot(np.linspace(0.0, T, N_t), cmbr['V0'] - grn['V'], label='Empty cmbr V')
-# axs[8].plot(np.linspace(0.0, T, N_t), grn['V'], label='grain volume')
-# axs[8].plot(np.linspace(0.0, T, N_t), cmbr['Pdot'], label='Pc dot')
-# axs[8].plot(np.linspace(0.0, T, N_t), grn['Vdot'], label='grain V dot')
-# axs[8].plot(np.linspace(0.0, T, N_t), grn['Vdot']/(cmbr['V0'] - grn['V']), label='Pc dot, V comb')
-# Pc*(mdot_g/m_g - dV/V)
 axs[8].legend()
-
-# Plot thrust validation, big hybrid 7-26-23
-daq = np.genfromtxt(hrap_root/'resources'/'validation'/'hybrid_fire_7_26_23.csv', delimiter=',', names=True, dtype=float, encoding='utf-8', deletechars='')
-axs[0].plot(daq['time'], daq['thrust']*_lbf, label='daq')
-axs[0].legend()
-
-
 
 # Save plot
 fig.tight_layout()
