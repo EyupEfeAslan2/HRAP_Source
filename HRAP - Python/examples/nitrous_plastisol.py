@@ -52,16 +52,16 @@ get_sat_nos_props = fluid.bake_sat_coolprop('NitrousOxide', np.linspace(183.0, 3
 print('Initializing engine...')
 
 # === sizing.py'den alınan değerler ===
-target_thrust = 500  # N
+target_thrust = 100  # N
 burn_time = 8.0  # s
-OF_ratio = 3.5
+OF_ratio = 7.3
 
 # Sizing.py'den gelen hesaplanmış değerler:
-throat_diameter_mm = 9.21
-grain_length_mm = 120.64  # 30.16 inch
-inner_diameter_mm = 40.00  # 1.575 inch (2.5/1000.0 * _in gibi görünüyor ama sizing 40mm veriyor)
+throat_diameter_mm = 10.05
+grain_length_mm = 60.00  # 30.16 inch
+inner_diameter_mm = 24.00  # 1.575 inch (2.5/1000.0 * _in gibi görünüyor ama sizing 40mm veriyor)
 outer_diameter_mm = 48.69  # 1.917 inch
-oxidizer_mass_flow = 0.04  # kg/s
+oxidizer_mass_flow = 0.047  # kg/s
 
 # Oksitleyici kütle hesabı
 m_ox_required = oxidizer_mass_flow * burn_time  # kg
@@ -73,10 +73,10 @@ tank_volume = (m_ox_required / rho_n2o_liquid) * 1.5  # 50% ullage
 # ENJEKTÖRün HESAPLANMASI
 # Enjektör CdA hesabı: mdot = Cd * A * sqrt(2 * rho * dP)
 # Basınç düşüşü genelde tank basıncının %20-30'u kadar alınır
-# Tank basıncı ~50 bar, chamber basıncı ~20-30 bar olacağından
+# Tank basıncı ~50 bar, chamber basıncı ~10 bar olacağından
 # dP ~20 bar = 2e6 Pa varsayalım
-Cd_injector = 0.7  # Tipik değer
-dP_injector = 2.0e6  # Pa (20 bar)
+Cd_injector = 0.65  # Tipik değer
+dP_injector = 4.0e6  # Pa (20 bar)
 rho_injector = rho_n2o_liquid  # kg/m³
 
 # mdot = Cd * A * sqrt(2 * rho * dP)
@@ -122,7 +122,7 @@ cmbr = make_chamber(
 # NOZZLE - Sizing.py'den gelen throat diameter
 noz = make_cd_nozzle(
     thrt = throat_diameter_mm / 1000.0,  # mm'den m'ye
-    ER = 4.99,  # Exit/throat area ratio
+    ER = 2.51,  # Exit/throat area ratio
     eff = 0.97,
     C_d = 0.995,
 )
