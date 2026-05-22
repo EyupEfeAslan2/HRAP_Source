@@ -52,22 +52,24 @@ design_point = "Optimum Expansion at 0.9033 bar (Ambient)"
 target_thrust = 100.0  # N
 burn_time = 8.0  # s
 Pc_target = 10.0 # bar
-Cf_target = 1.2542
-cstar_target = 1516.19 # m/s
-OF_ratio = 7.3
+Cf_target = 1.2413        # O/F 5.5 için yeni Cf
+cstar_target = 1490.72    # O/F 5.5 için yeni c*
+OF_ratio = 5.5            # Makine ekibinin hedefi
 fuel_density = 900.0 # kg/m³
-reg_a = 0.0001435 # m/s
+reg_a = 0.0001435 # m/s (Bunu kendi modelimiz çarpacak)
 reg_n = 0.5275
-initial_port_radius_mm = 12.0
-ambient_pressure_pa = 90300.0 # 0.9033 bar -> Pa
+ambient_pressure_pa = 90300.0 
 
-# 2. GEOMETRİ VE HESAPLANAN ÇIKTILAR (RPA + Python Outputs)
-throat_diameter_mm = 10.05
-exit_diameter_mm = 15.79
-grain_length_mm = 56.66  
-inner_diameter_mm = initial_port_radius_mm * 2.0  # 24.00 mm
-outer_diameter_mm = 50.37  
-oxidizer_mass_flow = 0.04596  # kg/s
+# 2. GEOMETRİ VE HESAPLANAN ÇIKTILAR
+throat_diameter_mm = 10.12 # Boğaz çapı F/(Pc*Cf) üzerinden yeniden hesaplandı
+exit_diameter_mm = 15.79 
+grain_length_mm = 22.02  
+inner_diameter_mm = 12.00  
+initial_port_radius_mm = 6.0 
+outer_diameter_mm = 80.0      # Do = 80 mm
+oxidizer_mass_flow = 0.04573  # 45.73 g/s (v3.0 çıktısı)
+
+
 
 fuel_mass_flow = oxidizer_mass_flow / OF_ratio
 total_mass_flow = oxidizer_mass_flow + fuel_mass_flow
@@ -76,11 +78,11 @@ oxidizer_mass_flux = oxidizer_mass_flow / port_area_m2
 web_thickness_mm = (outer_diameter_mm - inner_diameter_mm) / 2.0
 
 
-chamber_inner_diameter_mm = 54.0 
+chamber_inner_diameter_mm = 54.25  
 
 # Console report
 print("\n" + "="*60)
-print("=== ENGINEERING REPORT: HYBRID MOTOR SIZING ===")
+print("=== MOTOR BOYUTLARI RAPORU ===")
 print(f"Design Point: {design_point}")
 print("-" * 60)
 print("1. INPUTS & ASSUMPTIONS (per CEA/RPA):")
@@ -116,8 +118,8 @@ rho_n2o_liquid = 745.0  # kg/m³
 tank_volume = (m_ox_required / rho_n2o_liquid) * 1.5  # %50 ullage
 
 # INJECTOR 
-Cd_injector = 0.65  
-dP_injector = 4.0e6  # 40 bar basınç farkı
+Cd_injector = 0.55
+dP_injector = 3.843e6  # 38.43 basınç farkı
 rho_injector = rho_n2o_liquid  
 injector_area = oxidizer_mass_flow / (Cd_injector * np.sqrt(2 * rho_injector * dP_injector))
 inj_CdA = Cd_injector * injector_area
@@ -136,12 +138,14 @@ tnk = make_sat_tank(
 shape = make_circle_shape(
     ID = inner_diameter_mm / 1000.0,  
 )
-grn = make_constOF_grain(
+grn = make_shiftOF_grain(
     shape,
-    OF = OF_ratio,
+    Reg = np.array([reg_a * 1000.0, reg_n, 0.0]), 
     OD = outer_diameter_mm / 1000.0,  
     L = grain_length_mm / 1000.0,  
     rho = fuel_density,  
+    K_dti = 0.1333,          
+    D_inj_dti = 6.0 / 1000.0 
 )
 
 # 3. CHAMBER (YANMA ODASI)
@@ -152,7 +156,7 @@ rings_V    = 3 * (1/8*_in) * np.pi*(2.5/2 * _in)**2
 fuel_V     = (grain_length_mm/1000.0) * np.pi*((outer_diameter_mm/1000.0)/2)**2  
 cmbr = make_chamber(
     V0 = prepost_V + rings_V + fuel_V, 
-    cstar_eff = 0.9651*1.25,  
+    cstar_eff = 0.92,  # Typical for hybrid rockets; re-tune after verifying chemistry
 )
 
 # 4. NOZZLE (LÜLE)
@@ -167,9 +171,11 @@ noz = make_cd_nozzle(
 
 
 from jax.scipy.interpolate import RegularGridInterpolator
-chem_interp_k = RegularGridInterpolator((chem_OF, chem_Pc), chem_k, fill_value=1.4)
-chem_interp_M = RegularGridInterpolator((chem_OF, chem_Pc), chem_M, fill_value=29.0)
-chem_interp_T = RegularGridInterpolator((chem_OF, chem_Pc), chem_T, fill_value=293.0)
+# NOTE: chem_k/M/T are shaped (Pc, OF) from the nested loop. Transpose so axis order
+# matches the grid tuple (OF, Pc) expected by the interpolator.
+chem_interp_k = RegularGridInterpolator((chem_OF, chem_Pc), chem_k.T, fill_value=1.4)
+chem_interp_M = RegularGridInterpolator((chem_OF, chem_Pc), chem_M.T, fill_value=29.0)
+chem_interp_T = RegularGridInterpolator((chem_OF, chem_Pc), chem_T.T, fill_value=293.0)
 
 s, x, method = core.make_engine(
     tnk, grn, cmbr, noz,

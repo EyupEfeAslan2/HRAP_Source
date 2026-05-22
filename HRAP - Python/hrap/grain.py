@@ -43,37 +43,56 @@ def d_grain_constOF(s, x, xmap, fshape):
     return x
 
 def d_grain_shiftOF(s, x, xmap, fshape):
-    mdot_inj = x[xmap['tnk_mdot_inj']] # TODO: using vent?
+    mdot_inj = x[xmap['tnk_mdot_inj']]
     A = x[xmap['grn_A']]
     d = x[xmap['grn_d']]
     L   = s['grn_L']
     rho = s['grn_rho']
     Reg = s['grn_Reg']
     
-    # Current arc length of exposed grain on the cross section
+    # Correctly fetch DTI variables using the 'grn_' prefix that make_part adds
+    K = s.get('grn_K_dti', 0.0)         
+    D_inj = s.get('grn_D_inj_dti', 0.0) 
+    
     arc = fshape(d, s, x, xmap)
-    # Current volume
     V = L * A
     
-    G    = mdot_inj/A;
-    ddot = 0.001*Reg[0]*G**Reg[1]*L**Reg[2]
+    # --- PHYSICS FIX: Annulus Flow Area Calculation ---
+    D_m = s['grn_shape_ID'] + (2.0 * d)
+    # Area = (pi/4) * (Port_Diameter^2 - Injector_Tube_Diameter^2)
+    # Using jnp.maximum to prevent division by zero during JAX tracing
+    A_flow = jnp.maximum((jnp.pi / 4.0) * (D_m**2 - D_inj**2), 1e-6)
     
-    Adot = ddot*arc
-    Vdot = Adot*L
+    # Axial mass flow is reduced by the radial injection fraction (K)
+    mdot_axial = mdot_inj * (1.0 - K)
+    G = mdot_axial / A_flow
+    # --------------------------------------------------
     
-    mdot = Vdot*rho
+    # 1. Base HRAP Regression
+    ddot_ax = 0.001 * Reg[0] * (G**Reg[1]) * (L**Reg[2])
+    
+    # 2. DTI Multiplier
+    def apply_dti(ddot_base):
+        term1 = K / (1.0 - K)
+        term2 = 0.25 / (L / D_m)
+        term3 = jnp.maximum(1.0 - ((D_inj**2) / (D_m**2)), 0.001)
+        multiplier = 1.1216 * ((1.0 + 100.0 * ((term1 * term2 * term3)**0.8))**0.482)
+        return ddot_base * multiplier
+        
+    # K comes from `s` which is traced inside fori_loop — must use jax.lax.cond
+    # Positional signature: cond(pred, true_fun, false_fun, *operands)
+    ddot = cond(K > 0.0, lambda _: apply_dti(ddot_ax), lambda _: ddot_ax, None)
+    
+    Adot = ddot * arc
+    Vdot = Adot * L
+    
+    mdot = Vdot * rho
     mdot = cond(A <= 0.0, lambda val: 0.0, lambda val: val, mdot)
     
     OF = mdot_inj / mdot
     
-    # Store result
     x = store_x(x, xmap, grn_Adot=-Adot, grn_ddot=ddot, grn_V=V, grn_mdot=mdot, grn_Vdot=Vdot, cmbr_OF=OF)
-    
     return x
-
-# def d_grain_fit(s, x, xmap, fshape):
-#     # Get exposed area along the grain
-#     A_burn = arc * L
 
 def u_grain(s, x, xmap):
     x = store_x(x, xmap,
@@ -82,10 +101,6 @@ def u_grain(s, x, xmap):
     )
     
     return x
-
-# def i_circle(s, x, xmap):
-    
-#     return s, x
 
 def make_circle_shape(**kwargs):
     def fcircle(d, s, x, xmap):
@@ -166,6 +181,8 @@ def make_shiftOF_grain(shape, **kwargs):
             'L': 0.1,
             'Reg': jnp.zeros(3), # Regression coefficient (mm/s), regression exponent, length exponent
             'rho': 1000.0,
+            'K_dti': 0.0,
+            'D_inj_dti': 0.0,
             **shape['s'],
         },
         x = {
@@ -182,7 +199,7 @@ def make_shiftOF_grain(shape, **kwargs):
         },
         
         # Required and integrated variables
-        req_s = ['OD', 'L', 'OF'],
+        req_s = ['OD', 'L'],  # No 'OF' — it's computed dynamically in shiftOF mode
         req_x = ['A'],
         dx    = {'A': 'Adot', 'd': 'ddot'},
 
