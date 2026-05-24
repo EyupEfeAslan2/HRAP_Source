@@ -4,15 +4,15 @@ def calculate_motor_geometry(
     thrust_N, 
     burn_time_s, 
     chamber_pressure_bar, 
-    ambient_pressure_bar=1.01325, 
-    thrust_coefficient=1.5,   # Varsayılan değerler
-    c_star=1500.0,            # Varsayılan değerler
-    fixed_OF_ratio=5.0, 
+    ambient_pressure_bar=0.9033, 
+    thrust_coefficient=1.2413,   # O/F 5.5 için Cf
+    c_star=1490.72,              # O/F 5.5 için c*
+    fixed_OF_ratio=5.5, 
     gamma=1.2, 
-    fuel_density=900.0,       # Parafin vb. için ortalama
-    regression_coeff_a=0.0001, 
-    regression_exp_n=0.5, 
-    initial_port_radius_mm=20.0
+    fuel_density=900.0,          # Plastisol için
+    regression_coeff_a=0.0001435, 
+    regression_exp_n=0.5275, 
+    initial_port_radius_mm=15.0  # Di=30mm → r=15mm
 ):
     """
     Hedeflenen itki ve süreye göre motorun fiziksel boyutlarını hesaplar.

@@ -142,10 +142,10 @@ axs[0].set_title('Thrust')
 
 # Plot oxidizer flow rate
 axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_ox'], label='mdot_ox')
-axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_inj'], label='mdot_inj')
+axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_ox_total'], label='mdot_ox_total')
 axs[1].plot(np.linspace(0.0, T, N_t), tnk['mdot_vnt'], label='mdot_vnt')
-axs[1].plot(np.linspace(0.0, T, N_t), grn['mdot'], label='mdot_grn')
-axs[1].plot(np.linspace(0.0, T, N_t), noz['mdot'], label='mdot_noz')
+axs[1].plot(np.linspace(0.0, T, N_t), grn['mdot_fuel'], label='mdot_fuel')
+axs[1].plot(np.linspace(0.0, T, N_t), noz['mdot_total'], label='mdot_total')
 axs[1].plot(np.linspace(0.0, T, N_t), cmbr['mdot_g'], label='mdot_cmbr')
 axs[1].legend(loc='upper right')
 axs[1].set_title('mdot')

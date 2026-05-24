@@ -8,17 +8,20 @@ import jax.numpy as jnp
 from jax.lax import cond
 
 def d_chamber(s, x, xmap):
-    Pc       = x[xmap['cmbr_P']]        # Combustion chamber pressure
-    grn_mdot = x[xmap['grn_mdot']]         # Rate of grain mass being consumed
-    inj_mdot = x[xmap['tnk_mdot_inj']]      # Rate of tank propellants being consumed
-    noz_mdot = x[xmap['noz_mdot']]      # Rate of mass exiting through nozzle
-    m_g      = x[xmap['cmbr_m_g']]      # Mass of gas currently in chamber
-    V        = x[xmap['cmbr_V0']] - x[xmap['grn_V']] # Gas volume in chamber
-    dV       = x[xmap['grn_Vdot']] # Gas volume in chamber derivative
-    OF       = x[xmap['cmbr_OF']] # O/F ratio, set by grain file
+    Pc           = x[xmap['cmbr_P']]              # Combustion chamber pressure
+    mdot_fuel    = x[xmap['grn_mdot_fuel']]       # Rate of fuel (grain) mass being consumed
+    mdot_ox_total = x[xmap['tnk_mdot_ox_total']]  # Rate of oxidizer mass entering chamber
+    noz_mdot_total = x[xmap['noz_mdot_total']]    # Rate of mass exiting through nozzle
+    m_g          = x[xmap['cmbr_m_g']]            # Mass of gas currently in chamber
+    V            = x[xmap['cmbr_V0']] - x[xmap['grn_V']] # Gas volume in chamber
+    dV           = x[xmap['grn_Vdot']]            # Gas volume in chamber derivative
+    OF           = x[xmap['cmbr_OF']]             # O/F ratio, set by grain file
+
+    # Total propellant mass flow entering chamber = oxidizer + fuel
+    mdot_total = mdot_ox_total + mdot_fuel
 
     # Chamber stored mass derivative
-    mdot_g = grn_mdot + inj_mdot - noz_mdot
+    mdot_g = mdot_total - noz_mdot_total
     mdot_g = cond((m_g <= 0.0) & (mdot_g < 0.0), lambda val: 0.0, lambda val: val, mdot_g)
 
     # Chamber pressure derivative

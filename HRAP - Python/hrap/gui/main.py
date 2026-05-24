@@ -604,7 +604,7 @@ def main():
         # print('save as', app_data)
     
     def export_rse_callback(sender, app_data):
-        thrust, prop_mdot = [xstack[:,method['xmap'][k]] for k in ['noz_thrust', 'noz_mdot']]
+        thrust, prop_mdot = [xstack[:,method['xmap'][k]] for k in ['noz_thrust', 'noz_mdot_total']]
         OD, L = [get_param(k) for k in ['dry_OD', 'dry_L']]
         m, cg = calculate_m_Cg()
         core.export_rse(

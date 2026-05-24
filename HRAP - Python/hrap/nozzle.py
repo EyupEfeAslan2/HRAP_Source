@@ -57,7 +57,7 @@ def d_cd_nozzle(s, x, xmap):
     thrust = s['noz_eff']*Cf*A_thrt*Pc*s['noz_Cd']
 
     # Store state
-    x = store_x(x, xmap, noz_mdot=mdot, noz_Me=Me, noz_Pe=Pe, noz_thrust=thrust)
+    x = store_x(x, xmap, noz_mdot_total=mdot, noz_Me=Me, noz_Pe=Pe, noz_thrust=thrust)
 
     return x
 
@@ -81,7 +81,7 @@ def make_cd_nozzle(**kwargs):
         
         # Default initial variables
         x = {
-            'mdot':   0.0,
+            'mdot_total':   0.0,
             'Me':     0.0,
             'Pe':     0.0,
             'thrust': 0.0,

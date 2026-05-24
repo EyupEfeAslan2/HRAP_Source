@@ -11,7 +11,7 @@ from jax.lax import cond
 from functools import partial
 
 def d_grain_constOF(s, x, xmap, fshape):
-    mdot_inj = x[xmap['tnk_mdot_inj']] # TODO: using vent?
+    mdot_ox_total = x[xmap['tnk_mdot_ox_total']] # TODO: using vent?
     A = x[xmap['grn_A']]
     d = x[xmap['grn_d']]
     L   = s['grn_L']
@@ -25,11 +25,11 @@ def d_grain_constOF(s, x, xmap, fshape):
     V = L * A
     
     # Grain consumption rate (positive)
-    mdot = mdot_inj / OF
-    mdot = cond(A <= 0.0, lambda val: 0.0, lambda val: val, mdot)
+    mdot_fuel = mdot_ox_total / OF
+    mdot_fuel = cond(A <= 0.0, lambda val: 0.0, lambda val: val, mdot_fuel)
     
     # Rate of volume consumption (positive)
-    Vdot = mdot / rho
+    Vdot = mdot_fuel / rho
     
     # Rate of cross section area loss
     Adot = Vdot / L
@@ -38,12 +38,12 @@ def d_grain_constOF(s, x, xmap, fshape):
     ddot = Adot / arc
     
     # Store result
-    x = store_x(x, xmap, grn_Adot=-Adot, grn_ddot=ddot, grn_V=V, grn_mdot=mdot, grn_Vdot=Vdot, cmbr_OF=OF)
+    x = store_x(x, xmap, grn_Adot=-Adot, grn_ddot=ddot, grn_V=V, grn_mdot_fuel=mdot_fuel, grn_Vdot=Vdot, cmbr_OF=OF)
 
     return x
 
 def d_grain_shiftOF(s, x, xmap, fshape):
-    mdot_inj = x[xmap['tnk_mdot_inj']]
+    mdot_ox_total = x[xmap['tnk_mdot_ox_total']]
     A = x[xmap['grn_A']]
     d = x[xmap['grn_d']]
     L   = s['grn_L']
@@ -64,7 +64,7 @@ def d_grain_shiftOF(s, x, xmap, fshape):
     A_flow = jnp.maximum((jnp.pi / 4.0) * (D_m**2 - D_inj**2), 1e-6)
     
     # Axial mass flow is reduced by the radial injection fraction (K)
-    mdot_axial = mdot_inj * (1.0 - K)
+    mdot_axial = mdot_ox_total * (1.0 - K)
     G = mdot_axial / A_flow
     # --------------------------------------------------
     
@@ -86,12 +86,12 @@ def d_grain_shiftOF(s, x, xmap, fshape):
     Adot = ddot * arc
     Vdot = Adot * L
     
-    mdot = Vdot * rho
-    mdot = cond(A <= 0.0, lambda val: 0.0, lambda val: val, mdot)
+    mdot_fuel = Vdot * rho
+    mdot_fuel = cond(A <= 0.0, lambda val: 0.0, lambda val: val, mdot_fuel)
     
-    OF = mdot_inj / mdot
+    OF = mdot_ox_total / mdot_fuel
     
-    x = store_x(x, xmap, grn_Adot=-Adot, grn_ddot=ddot, grn_V=V, grn_mdot=mdot, grn_Vdot=Vdot, cmbr_OF=OF)
+    x = store_x(x, xmap, grn_Adot=-Adot, grn_ddot=ddot, grn_V=V, grn_mdot_fuel=mdot_fuel, grn_Vdot=Vdot, cmbr_OF=OF)
     return x
 
 def u_grain(s, x, xmap):
@@ -153,7 +153,7 @@ def make_constOF_grain(shape, **kwargs):
             'V': 0.0,
             'Vdot': 0.0,
             'P': 101e3,
-            'mdot': 0.0,
+            'mdot_fuel': 0.0,
             
             **shape['x'],
         },
@@ -193,7 +193,7 @@ def make_shiftOF_grain(shape, **kwargs):
             'V': 0.0,
             'Vdot': 0.0,
             'P': 101e3,
-            'mdot': 0.0,
+            'mdot_fuel': 0.0,
             
             **shape['x'],
         },
