@@ -130,7 +130,7 @@ def d_sat_tank(s, x, xmap, get_sat_props):
             return (inj_NCdA*Pt/jnp.sqrt(T))*jnp.sqrt(1.31/(Z*188.91))*Mcc*(1+(0.31)/2*Mcc**2)**(-2.31/0.62)
 
     # Get injected vapor or liquid oxidizer mass flow rate
-    mdot_inj = cond(
+    mdot_ox_total = cond(
         m_liq <= 1E-3,
         lambda m_vap, inj_NCdA, T, Z, Mcc, rho_l, rho_v, dP: cond(
             m_vap <= 0.0,
@@ -144,16 +144,16 @@ def d_sat_tank(s, x, xmap, get_sat_props):
     # jax.debug.print("INJ Debug {a} {b} {x} {y} {c} {d} {e} {f}", a=m_liq, b=m_vap, x=Pt, y=T, c=ox['Z'], d=Mcc, e=mdot_inj, f=(inj_CdA*inj_N*Pt/jnp.sqrt(T))*jnp.sqrt(1.31/(ox['Z']*188.91))*Mcc*(1+(0.31)/2*Mcc**2)**(-2.31/0.62))
     
     # Total loss rate of oxidizer = base injected rate + vent rate
-    mdot_ox = -(mdot_inj + mdot_vnt)
+    mdot_ox = -(mdot_ox_total + mdot_vnt)
     
     # Add vent flow rate to injector rate if plumbed to chamber
-    mdot_inj = cond(
+    mdot_ox_total = cond(
         s['tnk_vnt_S'] != 2,
-        lambda mdot_inj, mdot_vnt:
-            mdot_inj,
-        lambda mdot_inj, mdot_vnt:
-            mdot_inj + mdot_vnt,
-        mdot_inj, mdot_vnt
+        lambda mdot_ox_total, mdot_vnt:
+            mdot_ox_total,
+        lambda mdot_ox_total, mdot_vnt:
+            mdot_ox_total + mdot_vnt,
+        mdot_ox_total, mdot_vnt
     )
     
     # Get temperature and pressure rates at various stages of blowdown
@@ -171,7 +171,7 @@ def d_sat_tank(s, x, xmap, get_sat_props):
     # Set temperature rate to 0 if outside supported range and not headed back
     
     # Store state and derivatives
-    x = store_x(x, xmap, tnk_P=Pt, tnk_Tdot=Tdot, tnk_Pdot=Pdot, tnk_mdot_ox=mdot_ox, tnk_mdot_inj=mdot_inj, tnk_mdot_vnt=mdot_vnt)
+    x = store_x(x, xmap, tnk_P=Pt, tnk_Tdot=Tdot, tnk_Pdot=Pdot, tnk_mdot_ox=mdot_ox, tnk_mdot_ox_total=mdot_ox_total, tnk_mdot_vnt=mdot_vnt)
     
     return x
 
@@ -211,7 +211,7 @@ def make_sat_tank(get_sat_props, **kwargs):
             
             # Calculated variables
             'Pdot': 0.0,
-            'mdot_inj': 0.0,
+            'mdot_ox_total': 0.0,
             'mdot_vnt': 0.0,
             'P':   101e3,
             'm_ox_liq': 0.0,
